@@ -17,6 +17,7 @@ def get_opts():
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
+    parser.add_argument('--use_gpu', default=True, help='whether to use GPU')
 
     # original NeRF parameters
     parser.add_argument('--N_emb_xyz', type=int, default=10,
