@@ -16,7 +16,7 @@ python train.py --dataset_name blender --root_dir $BLENDER_DIR --N_importance 64
 
 Add `--encode_a` for appearance embedding, `--encode_t` for transient embedding.
 
-You can monitor the training process by `tensorboard --logdir logs/` and go to `localhost:6006` in your browser.
+You can monitor the training process by `tensorboard --logdir runs` and go to `localhost:6006` in your browser.
 
 ### Pretrained models and logs
 You can download the pretrained models and training logs in [release](https://github.com/kwea123/nerf_pl/releases).
