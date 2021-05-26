@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from collections import OrderedDict
+
 
 class PosEmbedding(nn.Module):
     def __init__(self, max_logscale, N_freqs, logscale=True):
@@ -82,8 +84,14 @@ class NeRF(nn.Module):
                 layer = nn.Linear(W+in_channels_xyz, W)
             else:
                 layer = nn.Linear(W, W)
-            layer = nn.Sequential(layer, nn.ReLU(True))
+            # layer = nn.Sequential(layer, nn.ReLU(True))
+
+            layer = nn.Sequential(OrderedDict([
+                (f'density', layer),
+                (f'activation', nn.ReLU(True))
+            ]))
             setattr(self, f"xyz_encoding_{i+1}", layer)
+
         self.xyz_encoding_final = nn.Linear(W, W)
 
         # direction encoding layers, refers to the green block in Figure 3 (NeRF-W)
@@ -97,7 +105,12 @@ class NeRF(nn.Module):
         )
 
         # static output layers
-        self.static_sigma = nn.Sequential(nn.Linear(W, 1), nn.Softplus())  # outputs the density from the orange block
+        self.static_sigma = nn.Sequential(OrderedDict([  # outputs the density from the orange block
+            (f'density', nn.Linear(W, 1)),
+            (f'activation', nn.Softplus())
+        ]))
+
+        # self.static_sigma = nn.Sequential(nn.Linear(W, 1), nn.Softplus())
         self.static_rgb = nn.Sequential(nn.Linear(W//2, 3), nn.Sigmoid())  # outputs the RGB color from the green block
 
         if self.encode_transient:
