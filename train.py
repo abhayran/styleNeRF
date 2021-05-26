@@ -8,6 +8,7 @@ from utils import *
 from losses import loss_dict
 from metrics import *
 from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
 
 
 class Pipeline(nn.Module):
@@ -20,7 +21,21 @@ class Pipeline(nn.Module):
         self.embeddings = embeddings
         self.embeddings['xyz'].to(self.device)
         self.embeddings['dir'].to(self.device)
+
         self.hparams = hparams
+        self.is_learning_density = True
+        self.style_image = torch.tensor(plt.imread('style.jpg'), device=self.device).permute(2, 0, 1) / 255.0
+
+    def switch_stage(self):
+        self.is_learning_density = not self.is_learning_density
+        for child in self.models['coarse'].children():
+            if hasattr(child, 'density'):
+                for param in child.parameters():
+                    param.requires_grad = not param.requires_grad
+        for child in self.models['fine'].children():
+            if hasattr(child, 'density'):
+                for param in child.parameters():
+                    param.requires_grad = not param.requires_grad
 
     def forward(self, rays, ts, white_back):
         results = defaultdict(list)
@@ -99,9 +114,16 @@ def train(hparams):
     optimizer = get_optimizer(hparams, pl.models)
     scheduler = get_scheduler(hparams, optimizer)
 
-    logger = Logger()
+    logger = Logger()  # logger wrapper for tensorboard
+    style_stage = False
+
     for epoch in range(hparams.num_epochs):
         print(f'Starting epoch {epoch + 1}...')
+        if epoch + 1 == hparams.num_epochs // 2:
+            style_stage = True
+            pl.switch_stage()
+            print('Switched to style learning!')
+
         # training
         pl.models['coarse'].train()
         pl.models['fine'].train()
