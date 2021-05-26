@@ -36,6 +36,32 @@ class Pipeline(nn.Module):
         return results
 
 
+class Logger:
+    def __init__(self):
+        self.writer = SummaryWriter()
+        self.keys = {}
+
+    def __call__(self, key, value):
+        if key in self.keys:
+            self.keys[key] += 1
+        else:
+            self.keys[key] = 1
+        if type(value) in [int, float]:
+            self.writer.add_scalar(key, value, self.keys[key])
+        elif type(value) is np.ndarray:
+            if len(value.shape) == 3:
+                self.writer.add_image(key, value, self.keys[key])
+            else:
+                self.writer.add_images(key, value, self.keys[key])
+        elif type(value) is torch.Tensor:
+            if torch.numel(value) == 1:
+                self.writer.add_scalar(key, float(value.item()), self.keys[key])
+            else:
+                raise ValueError("Can't log tensor containing more than one elements.")
+        else:
+            raise TypeError('Unexpected type. Options: int, float, 3d or 4d numpy arrays.')
+
+
 def data_setup(hparams):
     dataset = dataset_dict[hparams.dataset_name]
     kwargs = {'root_dir': hparams.root_dir,
@@ -53,8 +79,7 @@ def data_setup(hparams):
     return train_dataloader, val_dataloader
 
 
-def main(hparams):
-    train_step, val_step = 0, 0
+def train(hparams):
     train_dataloader, val_dataloader = data_setup(hparams)  # data loaders
 
     # pipeline setup
@@ -73,9 +98,10 @@ def main(hparams):
 
     optimizer = get_optimizer(hparams, pl.models)
     scheduler = get_scheduler(hparams, optimizer)
-    writer = SummaryWriter(log_dir=f'runs/{hparams.exp_name}')
 
+    logger = Logger()
     for epoch in range(hparams.num_epochs):
+        print(f'Starting epoch {epoch + 1}...')
         # training
         pl.models['coarse'].train()
         pl.models['fine'].train()
@@ -87,19 +113,18 @@ def main(hparams):
 
             loss_d = loss_func(results, rgbs)
             for k, v in loss_d.items():
-                writer.add_scalar(f'Loss/train_{k}', v, train_step)
+                logger(f'Loss/train_{k}', v)
 
             loss = sum(l for l in loss_d.values())
-            writer.add_scalar('Loss/train', float(loss.item()), train_step)
+            logger('Loss/train', loss)
             loss.backward()
             optimizer.step()
 
             typ = 'fine' if 'rgb_fine' in results else 'coarse'
             with torch.no_grad():
-                writer.add_scalar('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs), train_step)
-            train_step += 1
+                logger('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs))
 
-        writer.add_scalar('lr', get_learning_rate(optimizer), train_step, epoch+1)
+        logger('lr', get_learning_rate(optimizer))
 
         scheduler.step()
 
@@ -131,16 +156,18 @@ def main(hparams):
                     img_gt = rgbs.view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
                     depth = visualize_depth(results[f'depth_{typ}'].view(H, W))  # (3, H, W)
                     stack = torch.stack([img_gt, img, depth])  # (3, 3, H, W)
-                    writer.add_images('GT_pred_depth/val', stack, val_step)
+                    logger('GT_pred_depth/val', stack)
 
         for k, v in list_loss_d[0].items():
-            writer.add_scalar(f'Loss/val_{k}', sum([loss_d[k] for loss_d in list_loss_d]) / len(list_loss_d), val_step)
+            logger(f'Loss/val_{k}', sum([loss_d[k] for loss_d in list_loss_d]) / len(list_loss_d))
 
-        writer.add_scalar('Loss/val', sum(list_loss) / len(list_loss), val_step)
-        writer.add_scalar('PSNR/val', sum(list_psnr) / len(list_psnr), val_step)
-        val_step += 1
+        logger('Loss/val', sum(list_loss) / len(list_loss))
+        logger('PSNR/val', sum(list_psnr) / len(list_psnr))
+
+    torch.save(pl.models['coarse'].state_dict(), 'ckpts/nerf_coarse.pt')
+    torch.save(pl.models['fine'].state_dict(), 'ckpts/nerf_fine.pt')
 
 
 if __name__ == '__main__':
     hparams = get_opts()
-    main(hparams)
+    train(hparams)

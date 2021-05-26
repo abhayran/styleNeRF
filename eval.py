@@ -86,7 +86,7 @@ def batched_inference(models, embeddings,
                         0,
                         N_importance,
                         chunk,
-                        True,  # TODO: change to dataset.white_back after switching to DTU dataset
+                        dataset.white_back,
                         test_time=True)
 
         for k, v in rendered_ray_chunks.items():
@@ -98,6 +98,9 @@ def batched_inference(models, embeddings,
 
 
 if __name__ == "__main__":
+    COARSE_PATH = 'ckpts/nerf_coarse.pt'
+    FINE_PATH = 'ckpts/nerf_fine.pt'
+
     args = get_opts()
     w, h = args.img_wh
 
@@ -126,8 +129,13 @@ if __name__ == "__main__":
                     in_channels_t=args.N_tau,
                     beta_min=args.beta_min).cuda()
 
-    load_ckpt(nerf_coarse, args.ckpt_path, model_name='nerf_coarse')
-    load_ckpt(nerf_fine, args.ckpt_path, model_name='nerf_fine')
+    # load_ckpt(nerf_coarse, args.ckpt_path, model_name='nerf_coarse')
+    # load_ckpt(nerf_fine, args.ckpt_path, model_name='nerf_fine')
+
+    nerf_coarse.load_state_dict(torch.load(COARSE_PATH))
+    nerf_coarse.eval()
+    nerf_fine.load_state_dict(torch.load(FINE_PATH))
+    nerf_fine.eval()
 
     models = {'coarse': nerf_coarse, 'fine': nerf_fine}
 
