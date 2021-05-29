@@ -54,8 +54,10 @@ def get_opts():
                         help='batch size')
     parser.add_argument('--chunk', type=int, default=32*1024,
                         help='chunk size to split the input to avoid OOM')
-    parser.add_argument('--num_epochs', type=int, default=16,
-                        help='number of training epochs')
+    parser.add_argument('--num_epochs_density', type=int, default=1,
+                        help='number of training epochs for density learning stage')
+    parser.add_argument('--num_epochs_style', type=int, default=1,
+                        help='number of training epochs for style learning stage')
     parser.add_argument('--num_gpus', type=int, default=1,
                         help='number of gpus')
 
