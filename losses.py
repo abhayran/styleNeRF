@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+
 class ColorLoss(nn.Module):
     def __init__(self, coef=1):
         super().__init__()
@@ -13,6 +14,15 @@ class ColorLoss(nn.Module):
             loss += self.loss(inputs['rgb_fine'], targets)
 
         return self.coef * loss
+
+
+class StyleLoss(nn.Module):
+    def __init__(self, style_image):
+        super().__init__()
+        self.style_image = style_image
+
+    def forward(self, inputs, targets):
+        return inputs
 
 
 class NerfWLoss(nn.Module):
@@ -49,5 +59,7 @@ class NerfWLoss(nn.Module):
 
         return ret
 
+
 loss_dict = {'color': ColorLoss,
-             'nerfw': NerfWLoss}
+             'nerfw': NerfWLoss,
+             'style': StyleLoss}

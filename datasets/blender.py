@@ -30,10 +30,10 @@ def add_perturbation(img, perturbation, seed):
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, root_dir, split='train', img_wh=(800, 800),
-                 perturbation=[]):
+    def __init__(self, root_dir, split='train', img_wh=(800, 800), perturbation=[], is_learning_density=True):
         self.root_dir = root_dir
         self.split = split
+        self.is_learning_density = is_learning_density
         assert img_wh[0] == img_wh[1], 'image width must equal image height!'
         self.img_wh = img_wh
         self.define_transforms()
@@ -64,7 +64,7 @@ class BlenderDataset(Dataset):
         self.directions = \
             get_ray_directions(h, w, self.focal) # (h, w, 3)
             
-        if self.split == 'train': # create buffer of all rays and rgb data
+        if self.split == 'train' and self.is_learning_density: # create buffer of all rays and rgb data
             self.image_paths = []
             self.poses = []
             self.all_rays = []
@@ -103,14 +103,14 @@ class BlenderDataset(Dataset):
         self.transform = T.ToTensor()
 
     def __len__(self):
-        if self.split == 'train':
+        if self.split == 'train' and self.is_learning_density:
             return len(self.all_rays)
         if self.split == 'val':
             return 8  # only validate 8 images (to support <=8 gpus)
         return len(self.meta['frames'])
 
     def __getitem__(self, idx):
-        if self.split == 'train': # use data in the buffers
+        if self.split == 'train' and self.is_learning_density: # use data in the buffers
             sample = {'rays': self.all_rays[idx, :8],
                       'ts': self.all_rays[idx, 8].long(),
                       'rgbs': self.all_rgbs[idx]}
