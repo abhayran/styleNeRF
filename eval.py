@@ -98,8 +98,8 @@ def batched_inference(models, embeddings,
 
 
 if __name__ == "__main__":
-    COARSE_PATH = 'ckpts/nerf_coarse.pt'
-    FINE_PATH = 'ckpts/nerf_fine.pt'
+    COARSE_PATH = 'ckpts/style_nerf_coarse_epoch-99.pt'
+    FINE_PATH = 'ckpts/style_nerf_fine_epoch-99.pt'
 
     args = get_opts()
     w, h = args.img_wh
@@ -122,12 +122,7 @@ if __name__ == "__main__":
         embeddings['t'] = embedding_t
 
     nerf_coarse = NeRF('coarse').cuda()
-    nerf_fine = NeRF('fine',
-                    encode_appearance=args.encode_a,
-                    in_channels_a=args.N_a,
-                    encode_transient=args.encode_t,
-                    in_channels_t=args.N_tau,
-                    beta_min=args.beta_min).cuda()
+    nerf_fine = NeRF('fine', beta_min=args.beta_min).cuda()
 
     # load_ckpt(nerf_coarse, args.ckpt_path, model_name='nerf_coarse')
     # load_ckpt(nerf_fine, args.ckpt_path, model_name='nerf_fine')
@@ -163,7 +158,7 @@ if __name__ == "__main__":
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
         
-    imageio.mimsave(os.path.join(dir_name, f'{args.scene_name}.gif'), imgs, fps=30)
+    imageio.mimsave('sample.gif', imgs, fps=30)
     
     if psnrs:
         mean_psnr = np.mean(psnrs)
