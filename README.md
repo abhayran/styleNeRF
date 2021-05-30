@@ -1,6 +1,6 @@
 # styleNeRF
 
-Style transfer for neural radiance fields, based on a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl). 
+Style transfer for neural radiance fields, based on a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [official PyTorch implementation of fast neural style transfer](https://github.com/pytorch/examples/blob/master/fast_neural_style). 
 
 ### Download the blender dataset
 
