@@ -3,56 +3,10 @@ from torch import nn
 import math
 from torchvision import models
 from collections import namedtuple
+import copy
 
 
-def gram_matrix(y):
-    (b, ch, h, w) = y.size()
-    features = y.view(b, ch, w * h)
-    features_t = features.transpose(1, 2)
-    gram = features.bmm(features_t) / (ch * h * w)
-    return gram
 
-
-def normalize_batch(batch):
-    # normalize using imagenet mean and std
-    mean = batch.new_tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
-    std = batch.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
-    batch = batch.div_(255.0)
-    return (batch - mean) / std
-
-
-class Vgg16(torch.nn.Module):
-    def __init__(self, requires_grad=False):
-        super(Vgg16, self).__init__()
-        vgg_pretrained_features = models.vgg16(pretrained=True).features
-        self.slice1 = torch.nn.Sequential()
-        self.slice2 = torch.nn.Sequential()
-        self.slice3 = torch.nn.Sequential()
-        self.slice4 = torch.nn.Sequential()
-        for x in range(4):
-            self.slice1.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(4, 9):
-            self.slice2.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(9, 16):
-            self.slice3.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(16, 23):
-            self.slice4.add_module(str(x), vgg_pretrained_features[x])
-        if not requires_grad:
-            for param in self.parameters():
-                param.requires_grad = False
-
-    def forward(self, X):
-        h = self.slice1(X)
-        h_relu1_2 = h
-        h = self.slice2(h)
-        h_relu2_2 = h
-        h = self.slice3(h)
-        h_relu3_3 = h
-        h = self.slice4(h)
-        h_relu4_3 = h
-        vgg_outputs = namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3'])
-        out = vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3)
-        return out
 
 
 class ColorLoss(nn.Module):
@@ -67,41 +21,6 @@ class ColorLoss(nn.Module):
             loss += self.loss(inputs['rgb_fine'], targets)
 
         return self.coef * loss
-
-
-class StyleLoss(nn.Module):
-    def __init__(self, style_image):
-        super().__init__()
-        self.style_image = style_image
-        device = style_image.device
-        self.upsampler = nn.Upsample(size=self.style_image.shape[-2:], mode='bilinear', align_corners=True).to(device)
-        self.vgg = Vgg16(requires_grad=False).to(device)
-        self.mse_loss = torch.nn.MSELoss()
-        self.features_style = self.vgg(normalize_batch(self.style_image))
-        self.gram_style = [gram_matrix(y) for y in self.features_style]
-
-    def forward(self, inputs, targets):
-        rgb_fine = inputs['rgb_fine']
-        dim = int(math.sqrt(len(rgb_fine)))
-        rgb_fine = rgb_fine.view(1, 3, dim, dim) * 255
-
-        # content loss
-        features_rendered = self.vgg(normalize_batch(rgb_fine))
-        features_gt = self.vgg(normalize_batch(targets.view(1, 3, dim, dim) * 255))
-        content_loss = self.mse_loss(features_rendered.relu2_2, features_gt.relu2_2)
-
-        # style loss
-        features_rendered_upsampled = self.vgg(normalize_batch(self.upsampler(rgb_fine)))
-        style_loss = 0.
-        for ft_y, gm_s in zip(features_rendered_upsampled, self.gram_style):
-            gm_y = gram_matrix(ft_y)
-            style_loss += self.mse_loss(gm_y, gm_s)
-
-        return {
-            'ct_l': 1e3 * content_loss,
-            'st_l': 1e8 * style_loss
-        }
-
 
 class NerfWLoss(nn.Module):
     """
@@ -138,6 +57,189 @@ class NerfWLoss(nn.Module):
         return ret
 
 
+class FeatureLoss(nn.Module):
+    '''Given a content style reference images will find the style and content loss'''
+
+    def __init__(self, 
+        style_img,  
+        style_weight=1000000, 
+        content_weight=1
+    ) -> None:
+        super(FeatureLoss, self).__init__()
+
+        self.style_weight = style_weight
+        self.content_weight = content_weight
+
+        content_layers_default = ['conv_4']
+        style_layers_default = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
+        normalization_mean_default = torch.tensor([0.485, 0.456, 0.406])
+        normalization_std_default = torch.tensor([0.229, 0.224, 0.225])
+
+        # Load the VGG
+        print('Downloading vgg19')
+        cnn = models.vgg19(pretrained=True)
+
+        self.cnn = cnn.features.eval()
+
+        self.style_model, self.style_losses, self.content_losses = self.get_style_model_and_losses(
+            self.cnn,
+            style_img,
+            normalization_mean=normalization_mean_default,
+            normalization_std=normalization_std_default,
+            content_layers=content_layers_default,
+            style_layers=style_layers_default
+        )
+
+    def forward(self, input_img, content_img):
+
+        # collect feature loss tensors for the target/content image
+        self.style_model(content_img)
+        target_content_features = [cf.content_feature for cf in self.content_features]
+
+        # another forward pass for the input image
+        self.style_model(input_img)
+
+        style_score = 0
+        content_score = 0
+
+        # style loss
+        for sl in self.style_losses:
+            style_score += sl.loss
+
+        # content loss
+        input_content_features = [cf.content_feature for cf in self.content_features]
+        for in_cl_feat, target_cl_feat in zip(input_content_features, target_content_features):
+            content_score += F.mse_loss(in_cl_feat, target_cl_feat)
+
+        # weight the loss and combine
+        style_score *= self.style_weight
+        content_score *= self.content_weight
+
+        loss = style_score + content_score
+
+        return loss, style_score, content_score
+
+    def get_style_model_and_losses(self,
+        cnn, 
+        style_img,
+        normalization_mean, 
+        normalization_std,
+        content_layers,
+        style_layers
+    ):
+        '''Build model to be used for style/content loss'''
+
+        cnn = copy.deepcopy(cnn)
+
+        # normalization module
+        normalization = Normalization(
+            normalization_mean, 
+            normalization_std
+        )
+
+        # to have iterable access to a list of content features and style losses
+        content_features = []
+        style_losses = []
+
+        # assuming that cnn is a nn.Sequential, we make a new nn.Sequential
+        # to put in modules that are supposed to be activated sequentially
+        model = nn.Sequential(normalization)
+
+        i = 0  # increment every time we see a conv
+        for layer in cnn.children():
+            if isinstance(layer, nn.Conv2d):
+                i += 1
+                name = 'conv_{}'.format(i)
+            elif isinstance(layer, nn.ReLU):
+                name = 'relu_{}'.format(i)
+                # The in-place version doesn't play very nicely with the ContentLoss
+                # and StyleLoss we insert below. So we replace with out-of-place
+                # ones here.
+                layer = nn.ReLU(inplace=False)
+            elif isinstance(layer, nn.MaxPool2d):
+                name = 'pool_{}'.format(i)
+            elif isinstance(layer, nn.BatchNorm2d):
+                name = 'bn_{}'.format(i)
+            else:
+                raise RuntimeError('Unrecognized layer: {}'.format(layer.__class__.__name__))
+
+            model.add_module(name, layer)
+
+            # add content loss to the model:
+            if name in content_layers:
+                # Get the feature map of the content image using the half built model
+                content_feature = ContentFeature()
+                model.add_module("content_feat_{}".format(i), content_feature)
+                content_features.append(content_feature)
+
+            # add style loss to the model:
+            if name in style_layers:
+                # add style loss:
+                target_feature = model(style_img).detach()
+                style_loss = StyleLoss(target_feature)
+                model.add_module("style_loss_{}".format(i), style_loss)
+                style_losses.append(style_loss)
+
+        # now we trim off the layers after the last content and style losses
+        for i in range(len(model) - 1, -1, -1):
+            if isinstance(model[i], ContentFeature) or isinstance(model[i], StyleLoss):
+                break
+
+        model = model[:(i + 1)]
+
+        return model, style_losses, content_features
+
+class ContentFeature(nn.Module):
+    '''Extract the feature map'''
+    def __init__(self):
+        super(ContentFeature, self).__init__()
+
+    def forward(self, input):
+        # Save the content feature
+        self.content_feature = input
+        return input
+
+
+class StyleLoss(nn.Module):
+    '''Compute the style loss using Gram matrices'''
+    def __init__(self, target_feature):
+        super(StyleLoss, self).__init__()
+        self.target = self._gram_matrix(target_feature).detach()
+
+    def forward(self, input):
+        G = self._gram_matrix(input)
+        self.loss = F.mse_loss(G, self.target)
+        return input
+
+    def _gram_matrix(self, input):
+        # a=batch size(=1)
+        # b=number of feature maps
+        # (c,d)=dimensions of a f. map (N=c*d)
+        a, b, c, d = input.size()  
+
+        features = input.view(a * b, c * d)     # resise F_XL into \hat F_XL
+
+        G = torch.mm(features, features.t())    # compute the gram product
+
+        # 'normalize' the gram matrix by dividing by size of the feature map
+        return G.div(a * b * c * d)
+
+class Normalization(nn.Module):
+    '''VGG Normalisation (pretrained models expect this)'''
+
+    def __init__(self, mean, std):
+        super(Normalization, self).__init__()
+        # .view the mean and std to make them [C x 1 x 1] so that they can
+        # directly work with image Tensor of shape [B x C x H x W].
+        # B is batch size. C is number of channels. H is height and W is width.
+        self.mean = mean.view(-1, 1, 1)
+        self.std = std.view(-1, 1, 1)
+
+    def forward(self, img):
+        # normalize img
+        return (img - self.mean) / self.std
+
+
 loss_dict = {'color': ColorLoss,
              'nerfw': NerfWLoss,
-             'style': StyleLoss}
+             'style': FeatureLoss}
