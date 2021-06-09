@@ -1,6 +1,6 @@
 # styleNeRF
 
-Style transfer for neural radiance fields, based on a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [official PyTorch implementation of fast neural style transfer](https://github.com/pytorch/examples/blob/master/fast_neural_style). 
+Style transfer for neural radiance fields, based on a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
 
 ### Download the blender dataset
 
@@ -14,8 +14,6 @@ From the command line:
 python train.py --dataset_name blender --root_dir $BLENDER_DIR --N_importance 64 --img_wh 400 400 --noise_std 0 --num_epochs 20 --batch_size 1024 --optimizer adam --lr 5e-4 --lr_scheduler cosine --exp_name exp
 ```
 
-Add `--encode_a` for appearance embedding, `--encode_t` for transient embedding.
-
 You can monitor the training process by `tensorboard --logdir runs` and go to `localhost:6006` in your browser.
 
 ### Pretrained models and logs
@@ -26,10 +24,7 @@ You can download the pretrained models and training logs in [release](https://gi
 Use [eval.py](eval.py) to create the whole sequence of moving views.
 E.g.
 ```
-python eval.py \
-   --root_dir $BLENDER \
-   --dataset_name blender --scene_name lego \
-   --img_wh 400 400 --N_importance 64 --ckpt_path $CKPT_PATH
+python eval.py --root_dir $BLENDER --dataset_name blender --scene_name lego --img_wh 400 400 --N_importance 64 --ckpt_path $CKPT_PATH
 ```
 
 It will create folder `results/{dataset_name}/{scene_name}` and run inference on all test data, finally create a gif out of them.

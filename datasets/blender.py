@@ -64,7 +64,7 @@ class BlenderDataset(Dataset):
         self.directions = \
             get_ray_directions(h, w, self.focal) # (h, w, 3)
             
-        if self.split == 'train' and self.is_learning_density: # create buffer of all rays and rgb data
+        if self.split == 'train':  # create buffer of all rays and rgb data
             self.image_paths = []
             self.poses = []
             self.all_rays = []
@@ -103,17 +103,39 @@ class BlenderDataset(Dataset):
         self.transform = T.ToTensor()
 
     def __len__(self):
-        if self.split == 'train' and self.is_learning_density:
-            return len(self.all_rays)
+        if self.split == 'train':
+            if self.is_learning_density:
+                return len(self.all_rays)
+            else:
+                return len(self.all_rays) // 2500
         if self.split == 'val':
             return 8  # only validate 8 images (to support <=8 gpus)
         return len(self.meta['frames'])
 
     def __getitem__(self, idx):
-        if self.split == 'train' and self.is_learning_density: # use data in the buffers
-            sample = {'rays': self.all_rays[idx, :8],
-                      'ts': self.all_rays[idx, 8].long(),
-                      'rgbs': self.all_rgbs[idx]}
+        if self.split == 'train':  # use data in the buffers
+            if self.is_learning_density:
+                sample = {'rays': self.all_rays[idx, :8],
+                          'ts': self.all_rays[idx, 8].long(),
+                          'rgbs': self.all_rgbs[idx]}
+            else:
+                img_wh = self.img_wh[0]
+                sqrt_n_of_patches = (img_wh // 50)
+                n_of_patches = sqrt_n_of_patches ** 2
+
+                img_idx = idx // n_of_patches
+                rays = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
+                rays = rays.view(img_wh, img_wh, 8)
+                ts = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
+                ts = ts.view(img_wh, img_wh)
+                rgbs = self.all_rgbs[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2)]
+                rgbs = rgbs.view(img_wh, img_wh, 3)
+
+                patch_idx = idx % n_of_patches
+                i, j = patch_idx // sqrt_n_of_patches, patch_idx % sqrt_n_of_patches  # patch row and column
+                sample = {'rays': rays[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 8),
+                          'ts': ts[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50].flatten().long(),
+                          'rgbs': rgbs[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 3)}
 
         else: # create data for each image separately
             frame = self.meta['frames'][idx]

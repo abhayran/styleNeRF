@@ -135,6 +135,8 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)
 
     for i in tqdm(range(len(dataset))):
+        if i % 2 == 0:
+            continue
         sample = dataset[i]
         rays = sample['rays'].cuda()
         ts = sample['ts'].cuda()
@@ -154,7 +156,7 @@ if __name__ == "__main__":
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
 
-    imageio.mimsave('sample_test.gif', imgs, fps=30)
+    imageio.mimsave('sample.gif', imgs, fps=30)
 
     if psnrs:
         mean_psnr = np.mean(psnrs)

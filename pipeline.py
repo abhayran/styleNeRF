@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 
 def show(img):
-    plt.imshow(img.squeeze().permute(1, 2, 0).detach().cpu().numpy())
+    plt.imshow(img.detach().cpu().numpy())
     plt.show()
 
 
@@ -23,6 +23,7 @@ class Pipeline:
 
         COARSE_PATH = 'ckpts/density_nerf_coarse_epoch-0.pt'
         FINE_PATH = 'ckpts/density_nerf_fine_epoch-0.pt'
+
         torch.manual_seed(1337)
 
         self.hparams = hparams
@@ -120,7 +121,8 @@ class Pipeline:
             print(f'Starting epoch {epoch+1}...')
             for batch in self.train_dataloader:
                 rays, rgbs, ts = batch['rays'].to(device), batch['rgbs'].to(device), batch['ts'].to(device)
-
+                if torch.mean(rgbs) > 0.99:  # empty image
+                    continue
                 if not self.is_learning_density:
                     rays = rays.squeeze()  # (H*W, 3)
                     rgbs = rgbs.squeeze()  # (H*W, 3)
@@ -128,8 +130,6 @@ class Pipeline:
 
                 results = self(rays, ts, self.train_dataloader.dataset.white_back)
 
-                repeat = 1 if self.is_learning_density else 100
-                # for _ in range(repeat):
                 optimizer.zero_grad()
                 loss_d = loss_func(results, rgbs)
                 for k, v in loss_d.items():
