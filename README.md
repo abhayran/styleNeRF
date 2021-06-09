@@ -29,7 +29,7 @@ python eval.py --root_dir $BLENDER --dataset_name blender --scene_name lego --im
 
 It will create folder `results/{dataset_name}/{scene_name}` and run inference on all test data, finally create a gif out of them.
 
-![nerf-u](https://user-images.githubusercontent.com/11364490/105578186-a9933400-5dc1-11eb-8865-e276b581d8fd.gif)
+![sample](https://user-images.githubusercontent.com/40629249/121401340-e7e85480-c958-11eb-9e04-fc49ee226c34.gif)
 
 ### Notes on differences with the paper
 
