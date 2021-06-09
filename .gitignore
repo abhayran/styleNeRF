@@ -139,3 +139,5 @@ dmypy.json
 datasets/nerf_synthetic
 runs
 sample.gif
+test.py
+vgg19.pt

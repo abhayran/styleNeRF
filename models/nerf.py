@@ -101,6 +101,12 @@ class NeRF(nn.Module):
                                 nn.Linear(W // 2, W // 2),
                                 nn.ReLU(True),
                                 nn.Linear(W // 2, W // 2),
+                                nn.ReLU(True),
+                                nn.Linear(W // 2, W // 2),
+                                nn.ReLU(True),
+                                nn.Linear(W // 2, W // 2),
+                                nn.ReLU(True),
+                                nn.Linear(W // 2, W // 2),
                                 nn.ReLU(True)
         )
 

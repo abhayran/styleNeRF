@@ -1,4 +1,6 @@
+import torch
 import os
+import numpy as np
 from collections import defaultdict
 from tqdm import tqdm
 import imageio
@@ -15,6 +17,7 @@ from datasets.depth_utils import *
 
 torch.backends.cudnn.benchmark = True
 
+
 def get_opts():
     parser = ArgumentParser()
     parser.add_argument('--root_dir', type=str,
@@ -25,7 +28,7 @@ def get_opts():
                         help='which dataset to validate')
     parser.add_argument('--scene_name', type=str, default='test',
                         help='scene name, used as output folder name')
-    parser.add_argument('--split', type=str, default='val',
+    parser.add_argument('--split', type=str, default='test',
                         choices=['val', 'test', 'test_train'])
     parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
                         help='resolution (img_w, img_h) of the image')
@@ -57,7 +60,7 @@ def get_opts():
     parser.add_argument('--beta_min', type=float, default=0.1,
                         help='minimum color variance for each ray')
 
-    parser.add_argument('--chunk', type=int, default=32*1024*4,
+    parser.add_argument('--chunk', type=int, default=32 * 1024 * 4,
                         help='chunk size to split the input to avoid OOM')
 
     parser.add_argument('--ckpt_path', type=str, required=True,
@@ -78,8 +81,8 @@ def batched_inference(models, embeddings,
         rendered_ray_chunks = \
             render_rays(models,
                         embeddings,
-                        rays[i:i+chunk],
-                        ts[i:i+chunk],
+                        rays[i:i + chunk],
+                        ts[i:i + chunk],
                         N_samples,
                         use_disp,
                         0,
@@ -98,8 +101,9 @@ def batched_inference(models, embeddings,
 
 
 if __name__ == "__main__":
-    COARSE_PATH = 'ckpts/style_nerf_coarse_epoch-99.pt'
-    FINE_PATH = 'ckpts/style_nerf_fine_epoch-99.pt'
+
+    COARSE_PATH = 'ckpts/style_nerf_coarse_epoch-0.pt'
+    FINE_PATH = 'ckpts/style_nerf_fine_epoch-0.pt'
 
     args = get_opts()
     w, h = args.img_wh
@@ -109,17 +113,9 @@ if __name__ == "__main__":
               'img_wh': tuple(args.img_wh)}
     dataset = dataset_dict[args.dataset_name](**kwargs)
 
-    embedding_xyz = PosEmbedding(args.N_emb_xyz-1, args.N_emb_xyz)
-    embedding_dir = PosEmbedding(args.N_emb_dir-1, args.N_emb_dir)
+    embedding_xyz = PosEmbedding(args.N_emb_xyz - 1, args.N_emb_xyz)
+    embedding_dir = PosEmbedding(args.N_emb_dir - 1, args.N_emb_dir)
     embeddings = {'xyz': embedding_xyz, 'dir': embedding_dir}
-    if args.encode_a:
-        embedding_a = torch.nn.Embedding(args.N_vocab, args.N_a).cuda()
-        load_ckpt(embedding_a, args.ckpt_path, model_name='embedding_a')
-        embeddings['a'] = embedding_a
-    if args.encode_t:
-        embedding_t = torch.nn.Embedding(args.N_vocab, args.N_tau).cuda()
-        load_ckpt(embedding_t, args.ckpt_path, model_name='embedding_t')
-        embeddings['t'] = embedding_t
 
     nerf_coarse = NeRF('coarse').cuda()
     nerf_fine = NeRF('fine', beta_min=args.beta_min).cuda()
@@ -148,8 +144,8 @@ if __name__ == "__main__":
                                     dataset.white_back)
 
         img_pred = results['rgb_fine'].view(h, w, 3).cpu().numpy()
-        
-        img_pred_ = (img_pred*255).astype(np.uint8)
+
+        img_pred_ = (img_pred * 255).astype(np.uint8)
         imgs += [img_pred_]
         imageio.imwrite(os.path.join(dir_name, f'{i:03d}.png'), img_pred_)
 
@@ -157,9 +153,9 @@ if __name__ == "__main__":
             rgbs = sample['rgbs']
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
-        
-    imageio.mimsave('sample.gif', imgs, fps=30)
-    
+
+    imageio.mimsave('sample_test.gif', imgs, fps=30)
+
     if psnrs:
         mean_psnr = np.mean(psnrs)
         print(f'Mean PSNR : {mean_psnr:.2f}')
