@@ -21,8 +21,8 @@ class Pipeline:
     def __init__(self, hparams):
         super().__init__()
 
-        COARSE_PATH = 'ckpts/density_nerf_coarse_epoch-0.pt'
-        FINE_PATH = 'ckpts/density_nerf_fine_epoch-0.pt'
+        # COARSE_PATH = 'ckpts/density_nerf_coarse_epoch-0.pt'
+        # FINE_PATH = 'ckpts/density_nerf_fine_epoch-0.pt'
 
         torch.manual_seed(1337)
 
@@ -44,8 +44,8 @@ class Pipeline:
             'fine': NeRF('fine', beta_min=hparams.beta_min).to(self.device)
         }
 
-        self.models['coarse'].load_state_dict(torch.load(COARSE_PATH))
-        self.models['fine'].load_state_dict(torch.load(FINE_PATH))
+        # self.models['coarse'].load_state_dict(torch.load(COARSE_PATH))
+        # self.models['fine'].load_state_dict(torch.load(FINE_PATH))
 
         self.dataset = dataset_dict[hparams.dataset_name]
         self.kwargs = {'root_dir': hparams.root_dir,
@@ -69,6 +69,13 @@ class Pipeline:
             self.train_dataset = self.dataset(split='train', is_learning_density=False, **self.kwargs)
             self.train_dataloader = DataLoader(self.train_dataset, shuffle=True, num_workers=4, batch_size=1,
                                                pin_memory=True)
+
+    def create_checkpoint_data(self):
+        dataset = self.dataset(split='train', is_learning_density=True, **self.kwargs)
+        img_idx = 4
+        img_wh = tuple(self.hparams.img_wh)[0]
+        self.checkpoint_rays = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
+        self.checkpoint_ts = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
 
     def switch_stage(self):
         self.is_learning_density = not self.is_learning_density
@@ -109,19 +116,24 @@ class Pipeline:
         device = self.device
         logger = self.logger
 
+        self.hparams.lr = 5e-4 if self.is_learning_density else 1e-3
+
         optimizer = get_optimizer(self.hparams, self.models)
         # scheduler = get_scheduler(hparams, optimizer)
 
         self.training_data_setup()
+
+        self.create_checkpoint_data()
         self.models['coarse'].train()
         self.models['fine'].train()
 
         for epoch in range(num_epochs):
             # training
             print(f'Starting epoch {epoch+1}...')
-            for batch in self.train_dataloader:
+
+            for idx, batch in enumerate(self.train_dataloader):
                 rays, rgbs, ts = batch['rays'].to(device), batch['rgbs'].to(device), batch['ts'].to(device)
-                if torch.mean(rgbs) > 0.99:  # empty image
+                if torch.mean(rgbs) > 0.99 and not self.is_learning_density:  # empty image
                     continue
                 if not self.is_learning_density:
                     rays = rays.squeeze()  # (H*W, 3)
@@ -144,27 +156,29 @@ class Pipeline:
                     with torch.no_grad():
                         logger('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs))
 
-            logger('lr', get_learning_rate(optimizer))
+                if idx % 1000 == 0:
+                    self.models['coarse'].eval()
+                    self.models['fine'].eval()
+                    with torch.no_grad():
+                        rays, ts = self.checkpoint_rays.to(device), self.checkpoint_ts.to(device)
+                        rays = rays.squeeze()
+                        ts = ts.squeeze()
+                        results = self(rays, ts, self.val_dataloader.dataset.white_back)
+                        log_image = results['rgb_fine']
+                        dim = int(math.sqrt(len(log_image)))
+                        log_image = log_image.squeeze().permute(1, 0).view(3, dim, dim)
+                        logger(f'checkpoint_image_{idx}', log_image)
+                    self.models['coarse'].train()
+                    self.models['fine'].train()
 
-            with torch.no_grad():
-                for idx, batch in enumerate(self.val_dataloader):
-                    rays, rgbs, ts = batch['rays'].to(device), batch['rgbs'].to(device), batch['ts'].to(device)
-                    rays = rays.squeeze()  # (H*W, 3)
-                    rgbs = rgbs.squeeze()  # (H*W, 3)
-                    ts = ts.squeeze()  # (H*W)
-                    results = self(rays, ts, self.val_dataloader.dataset.white_back)
-                    log_image = results['rgb_fine']
-                    dim = int(math.sqrt(len(log_image)))
-                    log_image = log_image.squeeze().permute(1, 0).view(3, dim, dim)
-                    logger(f'sample_epoch{epoch}', log_image)
-                    break
+            logger('lr', get_learning_rate(optimizer))
 
             # scheduler.step()
 
             # model saving
             prefix = 'density' if self.is_learning_density else 'style'
-            torch.save(self.models['coarse'].state_dict(), f'ckpts/{prefix}_nerf_coarse_epoch-{epoch}.pt')
-            torch.save(self.models['fine'].state_dict(), f'ckpts/{prefix}_nerf_fine_epoch-{epoch}.pt')
+            torch.save(self.models['coarse'].state_dict(), f'ckpts/chair_{prefix}_nerf_coarse_epoch-{epoch}.pt')
+            torch.save(self.models['fine'].state_dict(), f'ckpts/chair_{prefix}_nerf_fine_epoch-{epoch}.pt')
 
             # # validation
             # self.models['coarse'].eval()
@@ -207,6 +221,6 @@ class Pipeline:
 if __name__ == '__main__':
     hparams = get_opts()
     pl = Pipeline(hparams)
-    # pl.train()
+    pl.train()
     pl.switch_stage()
     pl.train()
