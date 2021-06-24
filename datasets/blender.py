@@ -30,19 +30,25 @@ def add_perturbation(img, perturbation, seed):
 
 
 class BlenderDataset(Dataset):
-    def __init__(self, root_dir, split='train', img_wh=(800, 800), perturbation=[], is_learning_density=True):
+    def __init__(self, root_dir, split='train', img_wh=(400, 400), perturbation=[], is_learning_density=True, render_patches=False):
         self.root_dir = root_dir
         self.split = split
-        self.is_learning_density = is_learning_density
         assert img_wh[0] == img_wh[1], 'image width must equal image height!'
         self.img_wh = img_wh
         self.define_transforms()
+
+        self.is_learning_density = is_learning_density
+        self.render_patches = render_patches
 
         assert set(perturbation).issubset({"color", "occ"}), \
             'Only "color" and "occ" perturbations are supported!'
         self.perturbation = perturbation
         self.read_meta()
         self.white_back = True
+
+    def set_params(self, is_learning_density, render_patches):
+        self.is_learning_density = is_learning_density
+        self.render_patches = render_patches
 
     def read_meta(self):
         with open(os.path.join(self.root_dir,
@@ -107,7 +113,7 @@ class BlenderDataset(Dataset):
             if self.is_learning_density:
                 return len(self.all_rays)
             else:
-                return len(self.all_rays) // 2500
+                return len(self.all_rays) // 2500 if self.render_patches else 100
         if self.split == 'val':
             return 8  # only validate 8 images (to support <=8 gpus)
         return len(self.meta['frames'])
@@ -119,23 +125,30 @@ class BlenderDataset(Dataset):
                           'ts': self.all_rays[idx, 8].long(),
                           'rgbs': self.all_rgbs[idx]}
             else:
-                img_wh = self.img_wh[0]
-                sqrt_n_of_patches = (img_wh // 50)
-                n_of_patches = sqrt_n_of_patches ** 2
+                if self.render_patches:
+                    img_wh = self.img_wh[0]
+                    sqrt_n_of_patches = (img_wh // 50)
+                    n_of_patches = sqrt_n_of_patches ** 2
 
-                img_idx = idx // n_of_patches
-                rays = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
-                rays = rays.view(img_wh, img_wh, 8)
-                ts = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
-                ts = ts.view(img_wh, img_wh)
-                rgbs = self.all_rgbs[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2)]
-                rgbs = rgbs.view(img_wh, img_wh, 3)
+                    img_idx = idx // n_of_patches
+                    rays = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
+                    rays = rays.view(img_wh, img_wh, 8)
+                    ts = self.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
+                    ts = ts.view(img_wh, img_wh)
+                    rgbs = self.all_rgbs[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2)]
+                    rgbs = rgbs.view(img_wh, img_wh, 3)
 
-                patch_idx = idx % n_of_patches
-                i, j = patch_idx // sqrt_n_of_patches, patch_idx % sqrt_n_of_patches  # patch row and column
-                sample = {'rays': rays[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 8),
-                          'ts': ts[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50].flatten().long(),
-                          'rgbs': rgbs[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 3)}
+                    patch_idx = idx % n_of_patches
+                    i, j = patch_idx // sqrt_n_of_patches, patch_idx % sqrt_n_of_patches  # patch row and column
+                    sample = {'rays': rays[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 8),
+                              'ts': ts[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50].flatten().long(),
+                              'rgbs': rgbs[i * 50:(i + 1) * 50, j * 50:(j + 1) * 50, :].reshape(2500, 3)}
+                else:
+                    img_size = self.img_wh[0] ** 2
+
+                    sample = {'rays': self.all_rays[img_size * idx: img_size * (idx + 1), :8],
+                              'ts': self.all_rays[img_size * idx: img_size * (idx + 1), 8].long(),
+                              'rgbs': self.all_rgbs[img_size * idx: img_size * (idx + 1)]}
 
         else: # create data for each image separately
             frame = self.meta['frames'][idx]

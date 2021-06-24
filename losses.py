@@ -83,8 +83,7 @@ class FeatureLoss(nn.Module):
             style_layers=style_layers_default
         )
 
-    def forward(self, input, content_img):
-        input_img = input['rgb_fine']
+    def forward(self, input_img, content_img):
         numel_input = torch.numel(input_img)
         numel_content = torch.numel(content_img)
         assert numel_input == numel_content, 'Input image and content image must be in equal sizes!'
@@ -116,10 +115,12 @@ class FeatureLoss(nn.Module):
         style_score *= self.style_weight
         content_score *= self.content_weight
 
-        return {
-            'ct_l': content_score,
-            'st_l': style_score
-        }
+        # return {
+        #     'ct_l': content_score,
+        #     'st_l': style_score
+        # }
+
+        return style_score + content_score
 
     def get_style_model_and_losses(self,
         cnn,

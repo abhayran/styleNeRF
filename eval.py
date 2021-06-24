@@ -102,8 +102,8 @@ def batched_inference(models, embeddings,
 
 if __name__ == "__main__":
 
-    COARSE_PATH = 'ckpts/style_nerf_coarse_epoch-0.pt'
-    FINE_PATH = 'ckpts/style_nerf_fine_epoch-0.pt'
+    COARSE_PATH = 'ckpts/new_style_nerf_coarse_epoch-1.pt'
+    FINE_PATH = 'ckpts/new_style_nerf_fine_epoch-1.pt'
 
     args = get_opts()
     w, h = args.img_wh
@@ -135,8 +135,6 @@ if __name__ == "__main__":
     os.makedirs(dir_name, exist_ok=True)
 
     for i in tqdm(range(len(dataset))):
-        if i % 2 == 0:
-            continue
         sample = dataset[i]
         rays = sample['rays'].cuda()
         ts = sample['ts'].cuda()
@@ -156,7 +154,7 @@ if __name__ == "__main__":
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
 
-    imageio.mimsave('sample.gif', imgs, fps=30)
+    imageio.mimsave('new.gif', imgs, fps=30)
 
     if psnrs:
         mean_psnr = np.mean(psnrs)
