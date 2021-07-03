@@ -267,7 +267,7 @@ if __name__ == '__main__':
                       fine_path=hparams.fine_path  # fine NeRF
                       )
         pl.set_requires_grad(requires_grad=False)  # freeze density layer
-        pl.learn_style(style_path=hparams.style_dir, mode=hparams.style_mode)  # transfer the style
+        pl.learn_style(style_path=hparams.style_dir, style_mode=hparams.style_mode)  # transfer the style
         pl.log_model(prefix=hparams.prefix, suffix=hparams.suffix)  # log the model
 
     else:
