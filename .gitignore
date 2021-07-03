@@ -139,6 +139,5 @@ dmypy.json
 datasets/nerf_synthetic
 runs
 vgg19.pt
-starry_night.jpg
 italian_futurism.jpg
 wheat_field.jpg

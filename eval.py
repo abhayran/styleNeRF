@@ -33,6 +33,9 @@ def get_opts():
     parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
                         help='resolution (img_w, img_h) of the image')
 
+    parser.add_argument('--coarse_path', type=str, help='path to the coarse NeRF model')
+    parser.add_argument('--fine_path', type=str, help='path to the fine NeRF model')
+
     # original NeRF parameters
     parser.add_argument('--N_emb_xyz', type=int, default=10,
                         help='number of xyz embedding frequencies')
@@ -62,9 +65,6 @@ def get_opts():
 
     parser.add_argument('--chunk', type=int, default=32 * 1024 * 4,
                         help='chunk size to split the input to avoid OOM')
-
-    parser.add_argument('--ckpt_path', type=str, required=True,
-                        help='pretrained checkpoint path to load')
 
     return parser.parse_args()
 
@@ -101,10 +101,6 @@ def batched_inference(models, embeddings,
 
 
 if __name__ == "__main__":
-
-    COARSE_PATH = 'ckpts/new_style_nerf_coarse_epoch-1.pt'
-    FINE_PATH = 'ckpts/new_style_nerf_fine_epoch-1.pt'
-
     args = get_opts()
     w, h = args.img_wh
 
@@ -120,12 +116,9 @@ if __name__ == "__main__":
     nerf_coarse = NeRF('coarse').cuda()
     nerf_fine = NeRF('fine', beta_min=args.beta_min).cuda()
 
-    # load_ckpt(nerf_coarse, args.ckpt_path, model_name='nerf_coarse')
-    # load_ckpt(nerf_fine, args.ckpt_path, model_name='nerf_fine')
-
-    nerf_coarse.load_state_dict(torch.load(COARSE_PATH))
+    nerf_coarse.load_state_dict(torch.load(args.coarse_path))
     nerf_coarse.eval()
-    nerf_fine.load_state_dict(torch.load(FINE_PATH))
+    nerf_fine.load_state_dict(torch.load(args.fine_path))
     nerf_fine.eval()
 
     models = {'coarse': nerf_coarse, 'fine': nerf_fine}
@@ -154,7 +147,7 @@ if __name__ == "__main__":
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
 
-    imageio.mimsave('new.gif', imgs, fps=30)
+    imageio.mimsave('nerf.gif', imgs, fps=30)
 
     if psnrs:
         mean_psnr = np.mean(psnrs)

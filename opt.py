@@ -3,6 +3,22 @@ import argparse
 def get_opts():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--stage', type=str, default='style',
+                        help='''training stage. options:
+                                    'geometry', 'style' 
+                                 ''')
+    parser.add_argument('--style_dir', type=str, default=None, help='path to style image')
+    parser.add_argument('--style_mode', type=str, default='memory_saving',
+                        help='''style transfer method. options:
+                                'memory_saving', 'patch', 'small' 
+                             ''')
+
+    parser.add_argument('--prefix', type=str, default='', help='prefix for the model name')
+    parser.add_argument('--suffix', type=str, default='', help='suffix for the model name')
+
+    parser.add_argument('--coarse_path', type=str, default=None, help='path to coarse model when transferring style')
+    parser.add_argument('--fine_path', type=str, default=None, help='path to fine model when transferring style')
+
     parser.add_argument('--root_dir', type=str,
                         default='/home/ubuntu/data/nerf_example_data/nerf_synthetic/lego',
                         help='root directory of dataset')
@@ -13,7 +29,7 @@ def get_opts():
                         help='''what perturbation to add to data.
                                 Available choices: [], ["color"], ["occ"] or ["color", "occ"]
                              ''')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[400, 400],
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
@@ -26,13 +42,13 @@ def get_opts():
                         help='number of direction embedding frequencies')
     parser.add_argument('--N_samples', type=int, default=64,
                         help='number of coarse samples')
-    parser.add_argument('--N_importance', type=int, default=128,
+    parser.add_argument('--N_importance', type=int, default=64,
                         help='number of additional fine samples')
     parser.add_argument('--use_disp', default=False, action="store_true",
                         help='use disparity depth sampling')
     parser.add_argument('--perturb', type=float, default=1.0,
                         help='factor to perturb depth sampling points')
-    parser.add_argument('--noise_std', type=float, default=1.0,
+    parser.add_argument('--noise_std', type=float, default=0.0,
                         help='std dev of noise added to regularize sigma')
 
     # NeRF-W parameters
