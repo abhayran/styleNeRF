@@ -24,7 +24,7 @@ After downloading the dataset, run the following command for the Stage 1 where t
 python pipeline.py --stage geometry --prefix $PREFIX --suffix $SUFFIX --dataset_name blender --root_dir datasets/nerf_synthetic/lego --img_wh 400 400 --num_epochs_density 1 --batch_size 1024 --lr 5e-4
 ```
 
-The models will be logged under `./ckpts/$PREFIX_nerf_coarse_$SUFFIX.pt` and `./ckpts/$PREFIX_nerf_coarse_$SUFFIX.pt`
+The models will be logged under `./ckpts/$PREFIX_nerf_coarse_$SUFFIX.pt` and `./ckpts/$PREFIX_nerf_fine_$SUFFIX.pt`
 
 You can monitor the training process by `tensorboard --logdir runs` and go to `localhost:6006` in your browser.
 
@@ -43,7 +43,7 @@ Style transfer stage is very heavy in terms of memory consumption, since we can'
 - `patch`: Render patches and transfer the style to each patch individually. Better performance, but lacks global consistency and fails to capture higher level features since we have to process patches individually. 
 - `memory_saving`: This is a practical workaround which enables us to process pixels individually, yielding superior results. This approach consists of two substages:
     - Substage 1: Render image in inference mode, calculate and store gradients per pixel by the style loss
-    - Substage 2: Render pixels while freezing the geometry MLP, then backpropagate the corresponding stored pixel gradients. Wait for every pixel to be processed before making an update.
+    - Substage 2: Render pixels while freezing the geometry MLP, then backpropagate the corresponding stored pixel gradients. Wait for every pixel to be processed before stepping the optimizer.
 
 ![image](https://user-images.githubusercontent.com/40629249/124358547-1d632380-dc21-11eb-8695-2d05484ae04e.png)
 
@@ -56,5 +56,7 @@ python eval.py --dataset_name blender --root_dir datasets/nerf_synthetic/lego --
 ```
 
 It will create folder `results/{dataset_name}/{scene_name}` and run inference on all test data, finally create a gif out of them and save to `./nerf.gif`.
+
+- Example: A NeRF model trained first on the synthetic lego truck data with 400 x 400 images, then learned the style of the Van Gogh's starry night image using the `memory_saving` mode, using a GPU with 8GB of memory. Memory saving mode enables working GPUs with quite low memory.   
 
 ![ezgif com-gif-maker](https://user-images.githubusercontent.com/40629249/124356665-6ca45680-dc17-11eb-8830-45399841ecdd.gif)
