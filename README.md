@@ -21,16 +21,7 @@ Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders
 After downloading the dataset, run the following command for the Stage 1 where the scene geometry is learned:
 
 ```
-python pipeline.py \
-    --is_learning_density True
-    --prefix $PREFIX
-    --suffix $SUFFIX
-    --dataset_name blender \
-    --root_dir datasets/nerf_synthetic/lego \
-    --img_wh 400 400 \
-    --num_epochs_density 1 \ 
-    --batch_size 1024 \
-    --lr 5e-4
+python pipeline.py --is_learning_density True --prefix $PREFIX --suffix $SUFFIX --dataset_name blender --root_dir datasets/nerf_synthetic/lego --img_wh 400 400 --num_epochs_density 1 --batch_size 1024 --lr 5e-4
 ```
 
 The models will be logged under `./ckpts/$PREFIX_nerf_coarse_$SUFFIX.pt` and `./ckpts/$PREFIX_nerf_coarse_$SUFFIX.pt`
@@ -42,19 +33,7 @@ You can monitor the training process by `tensorboard --logdir runs` and go to `l
 Having trained the density model, we now transfer the style while freezing the geometry MLP with the following command:
 
 ```
-python pipeline.py \
-    --is_learning_density False
-    --prefix $PREFIX
-    --suffix $SUFFIX
-    --style_dir $STYLE_DIR
-    --style_mode $STYLE_MODE
-    --coarse_path $COARSE_PATH
-    --fine_path $FINE_PATH
-    --dataset_name blender \
-    --root_dir datasets/nerf_synthetic/lego \
-    --img_wh 400 400 \
-    --num_epochs_style 1 \ 
-    --lr 1e-3
+python pipeline.py --is_learning_density False --prefix $PREFIX --suffix $SUFFIX --style_dir $STYLE_DIR --style_mode $STYLE_MODE --coarse_path $COARSE_PATH --fine_path $FINE_PATH --dataset_name blender --root_dir datasets/nerf_synthetic/lego --img_wh 400 400 --num_epochs_style 1 --lr 1e-3
 ```
 
 where `$STYLE_DIR` is the path to style image, `$COARSE_PATH` is the path to previously logged coarse NeRF model and `$FINE_PATH` is the path to previously logged fine NeRF model.
