@@ -60,3 +60,8 @@ It will create folder `results/{dataset_name}/{scene_name}` and run inference on
 - Example: A NeRF model trained first on the synthetic lego truck data with 400 x 400 images, then learned the style of the Van Gogh's starry night image using the `memory_saving` mode, using a GPU with 8GB of memory. Memory saving mode enables working GPUs with quite low memory.   
 
 ![ezgif com-gif-maker](https://user-images.githubusercontent.com/40629249/124356665-6ca45680-dc17-11eb-8830-45399841ecdd.gif)
+
+- Comparison of different style transfer approaches:
+
+![image](https://user-images.githubusercontent.com/40629249/124361442-949fb400-dc2f-11eb-87d3-8a92860cc789.png)
+
