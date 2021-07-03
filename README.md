@@ -1,14 +1,16 @@
 # styleNeRF
 
-Style transfer for neural radiance fields, based on a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
+Style transfer for neural radiance fields in PyTorch. 
 
-### Download the blender dataset
+This project is built upon a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
 
-Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) and extract the content under `./datasets`
+## Download the blender dataset
 
-### Train the model
+Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) and extract the content under `~/datasets`.
 
-From the command line:
+## Train the model
+
+After downloading the dataset, run this command to train the NeRF model:
 
 ```
 python train.py --dataset_name blender --root_dir $BLENDER_DIR --N_importance 64 --img_wh 400 400 --noise_std 0 --num_epochs 20 --batch_size 1024 --optimizer adam --lr 5e-4 --lr_scheduler cosine --exp_name exp
@@ -16,10 +18,7 @@ python train.py --dataset_name blender --root_dir $BLENDER_DIR --N_importance 64
 
 You can monitor the training process by `tensorboard --logdir runs` and go to `localhost:6006` in your browser.
 
-### Pretrained models and logs
-You can download the pretrained models and training logs in [release](https://github.com/kwea123/nerf_pl/releases).
-
-### Testing
+## Testing
 
 Use [eval.py](eval.py) to create the whole sequence of moving views.
 E.g.
@@ -29,10 +28,4 @@ python eval.py --root_dir $BLENDER --dataset_name blender --scene_name lego --im
 
 It will create folder `results/{dataset_name}/{scene_name}` and run inference on all test data, finally create a gif out of them.
 
-![sample](https://user-images.githubusercontent.com/40629249/121401340-e7e85480-c958-11eb-9e04-fc49ee226c34.gif)
-
-### Notes on differences with the paper
-
-*  Current base MLP uses 8 layers of 256 units as the original NeRF, while NeRF-W uses **512** units each.
-*  Current static head uses 1 layer as the original NeRF, while NeRF-W uses **4** layers.
-*  **Softplus** activation for sigma (reason explained [here](https://github.com/bmild/nerf/issues/29#issuecomment-765335765)) while NeRF-W uses **relu**.
+![ezgif com-gif-maker](https://user-images.githubusercontent.com/40629249/124356665-6ca45680-dc17-11eb-8830-45399841ecdd.gif)
