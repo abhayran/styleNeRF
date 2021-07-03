@@ -10,7 +10,7 @@ We employ a two stage training. First stage is the standard NeRF training proced
 
 In the second stage, we freeze the geometry MLP and train style MLP by the style loss between rendered images and the style image. By doing so, we disentangle the geometry and appearance of the scene, hence manage to transfer the style while making sure the geometry is fixed.
 
-![image](https://user-images.githubusercontent.com/40629249/124357777-91033180-dc1d-11eb-9293-1f8dde0609c5.png)
+![image](https://user-images.githubusercontent.com/40629249/124367192-5d43fe00-dc55-11eb-9408-6e99529007e2.png)
 
 ## Download the blender dataset
 
@@ -45,7 +45,7 @@ Style transfer stage is very heavy in terms of memory consumption, since we can'
     - Substage 1: Render image in inference mode, calculate and store gradients per pixel by the style loss
     - Substage 2: Render pixels while freezing the geometry MLP, then backpropagate the corresponding stored pixel gradients. Wait for every pixel to be processed before stepping the optimizer.
 
-![image](https://user-images.githubusercontent.com/40629249/124358547-1d632380-dc21-11eb-8695-2d05484ae04e.png)
+![image](https://user-images.githubusercontent.com/40629249/124367388-03443800-dc57-11eb-9e93-5c80d1a724f4.png)
 
 ## Testing
 
