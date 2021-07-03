@@ -22,7 +22,7 @@ class Pipeline:
     def __init__(self, hparams, log_dir, **kwargs):
         super().__init__()
 
-        self.logger = Logger(log_dir=log_dir)
+        self.logger = Logger()
         torch.manual_seed(1337)
 
         self.hparams = hparams
@@ -101,13 +101,13 @@ class Pipeline:
         device = self.device
 
         optimizer = get_optimizer(self.hparams, self.models)
-        # scheduler = get_scheduler(hparams, optimizer)
 
         self.models['coarse'].train()
         self.models['fine'].train()
 
         self.train_dataset.set_params(is_learning_density=True, render_patches=False)
-        data_loader = DataLoader(self.train_dataset, shuffle=True, num_workers=4, batch_size=1024, pin_memory=True)
+        data_loader = DataLoader(self.train_dataset, shuffle=True, num_workers=4, batch_size=self.hparams.batch_size,
+                                 pin_memory=True)
 
         for epoch in range(num_epochs):
             print(f'Starting epoch {epoch+1} to learn density...')
@@ -127,13 +127,8 @@ class Pipeline:
                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
                 with torch.no_grad():
                     self.logger('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs))
-            # scheduler.step()
 
-            # model saving
-            torch.save(self.models['coarse'].state_dict(), f'ckpts/new_density_coarse_epoch-{epoch}.pt')
-            torch.save(self.models['fine'].state_dict(), f'ckpts/new_density_fine_epoch-{epoch}.pt')
-
-    def learn_style(self, style_path, **kwargs):
+    def learn_style(self, style_path, patches=False, **kwargs):
         self.style_image = Image.open(style_path)
         self.style_image = torch.tensor(np.array(self.style_image), device=self.device, dtype=torch.float)
         self.style_image = self.style_image.permute(2, 0, 1)
@@ -148,13 +143,43 @@ class Pipeline:
 
         num_patches = (img_wh // 50) ** 2
 
-        cached_images = []
+        if patches:  # transfer style using patches
+            self.train_dataset.set_params(is_learning_density=False, render_patches=True)
+            data_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=True)
 
-        for epoch in range(num_epochs):
-            for i in range(100):
+            for epoch in range(num_epochs):
+                for idx, data in enumerate(data_loader):
 
-                # image logging
-                if i % 10 == 0:
+                    # image logging
+                    if idx % 64 == 0:
+                        with torch.no_grad():
+                            rays, ts = self.checkpoint_rays.to(device), self.checkpoint_ts.to(device)
+                            rays = rays.squeeze()
+                            ts = ts.squeeze()
+                            results = self(rays, ts, self.val_dataloader.dataset.white_back)
+                            log_image = results['rgb_fine']
+                            dim = int(math.sqrt(len(log_image)))
+                            log_image = log_image.squeeze().permute(1, 0).view(3, dim, dim)
+                            self.logger(f'checkpoint_image_idx{idx}_epoch{epoch}', log_image)
+
+                    rays, rgbs, ts = data['rays'].to(device), data['rgbs'].to(device), data['ts'].to(device)
+                    rays = rays.squeeze()
+                    rgbs = rgbs.squeeze()
+                    ts = ts.squeeze()
+                    optimizer.zero_grad()
+                    rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                    if torch.mean(rendered_image) > 0.99:  # empty image
+                        continue
+                    loss = loss_func(rendered_image, rgbs)
+                    self.logger('Loss/train', loss)
+                    loss.backward()
+                    optimizer.step()
+
+        else:  # render whole images to transfer the style
+            for epoch in range(num_epochs):
+                for i in range(100):
+
+                    # image logging
                     with torch.no_grad():
                         rays, ts = self.checkpoint_rays.to(device), self.checkpoint_ts.to(device)
                         rays = rays.squeeze()
@@ -163,43 +188,38 @@ class Pipeline:
                         log_image = results['rgb_fine']
                         dim = int(math.sqrt(len(log_image)))
                         log_image = log_image.squeeze().permute(1, 0).view(3, dim, dim)
-
-                        cached_images.append(255 * log_image.permute(1, 2, 0).cpu().numpy().astype(np.uint8))
-
                         self.logger(f'checkpoint_image_idx{i}_epoch{epoch}', log_image)
 
-                # store gradients
-                self.train_dataset.set_params(is_learning_density=False, render_patches=False)
-                with torch.no_grad():
-                    sample = self.train_dataset[i]
-                    rays, rgbs, ts = sample['rays'].to(device), sample['rgbs'].to(device), sample['ts'].to(device)
-                    rays = rays.squeeze()
-                    rgbs = rgbs.squeeze()
-                    ts = ts.squeeze()
-                    rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
-                rendered_image.requires_grad_()
-                loss = loss_func(rendered_image, rgbs)
-                self.logger('Loss/train', loss)
-                loss.backward()
-                gradient = rendered_image.grad.reshape(img_wh, img_wh, 3).clone().detach()
+                    # Substage 1: store gradients
+                    self.train_dataset.set_params(is_learning_density=False, render_patches=False)
+                    with torch.no_grad():
+                        sample = self.train_dataset[i]
+                        rays, rgbs, ts = sample['rays'].to(device), sample['rgbs'].to(device), sample['ts'].to(device)
+                        rays = rays.squeeze()
+                        rgbs = rgbs.squeeze()
+                        ts = ts.squeeze()
+                        rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                    rendered_image.requires_grad_()
+                    loss = loss_func(rendered_image, rgbs)
+                    self.logger('Loss/train', loss)
+                    loss.backward()
+                    gradient = rendered_image.grad.reshape(img_wh, img_wh, 3).clone().detach()
 
-                # backprop gradients through NeRF
-                self.train_dataset.set_params(is_learning_density=False, render_patches=True)
-                optimizer.zero_grad()
-                for j in range(num_patches):  # iterate over patches
-                    sample = self.train_dataset[i*num_patches + j]
-                    rays, rgbs, ts = sample['rays'].to(device), sample['rgbs'].to(device), sample['ts'].to(device)
-                    rays = rays.squeeze()
-                    ts = ts.squeeze()
+                    # Substage 2: backprop gradients through NeRF
+                    self.train_dataset.set_params(is_learning_density=False, render_patches=True)
+                    optimizer.zero_grad()
+                    for j in range(num_patches):  # iterate over patches
+                        sample = self.train_dataset[i*num_patches + j]
+                        rays, rgbs, ts = sample['rays'].to(device), sample['rgbs'].to(device), sample['ts'].to(device)
+                        rays = rays.squeeze()
+                        ts = ts.squeeze()
 
-                    rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine'].reshape(50, 50, 3)
-                    if torch.mean(rendered_image) > 0.99:  # empty image
-                        continue
-                    r, c = j // (img_wh // 50), j % (img_wh // 50)
-                    rendered_image.backward(gradient[r * 50: (r + 1) * 50, c * 50: (c + 1) * 50])
-                optimizer.step()
-
-        imageio.mimsave('timeline.gif', cached_images, fps=30)
+                        rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine'].reshape(50, 50, 3)
+                        if torch.mean(rendered_image) > 0.99:  # empty image
+                            continue
+                        r, c = j // (img_wh // 50), j % (img_wh // 50)
+                        rendered_image.backward(gradient[r * 50: (r + 1) * 50, c * 50: (c + 1) * 50])
+                    optimizer.step()
 
     def log_model(self, prefix, suffix):
         torch.save(self.models['coarse'].state_dict(), f'ckpts/{prefix}_nerf_coarse_{suffix}.pt')
@@ -207,13 +227,15 @@ class Pipeline:
 
 
 if __name__ == '__main__':
-    style_path = 'starry_night.jpg'
+    style_path = 'italian_futurism.jpg'
     log_dir = f'runs/new'
     hparams = get_opts()
     pl = Pipeline(hparams,
-                  coarse_path='ckpts/density_nerf_coarse_epoch-0.pt',
-                  fine_path='ckpts/density_nerf_fine_epoch-0.pt',
+                  coarse_path='ckpts/new_density_nerf_coarse_epoch-5.pt',
+                  fine_path='ckpts/new_density_nerf_fine_epoch-5.pt',
                   log_dir=log_dir)
+    # pl.learn_density()
+    # pl.log_model(prefix='new_density', suffix='epoch-5')
     pl.set_requires_grad(requires_grad=False)
-    pl.learn_style(style_path=style_path)
-    pl.log_model(prefix='new_style', suffix='epoch-1')
+    pl.learn_style(style_path=style_path, patches=True)
+    pl.log_model(prefix='patches_italian_futurism_style', suffix='epoch-1')

@@ -58,7 +58,7 @@ class NerfWLoss(nn.Module):
 class FeatureLoss(nn.Module):
     '''Given a content style reference images will find the style and content loss'''
 
-    def __init__(self, style_img, style_weight=1000000, content_weight=1) -> None:
+    def __init__(self, style_img, style_weight=100000, content_weight=1) -> None:
         super(FeatureLoss, self).__init__()
 
         self.style_weight = style_weight
