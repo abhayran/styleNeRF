@@ -13,7 +13,7 @@ Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders
 After downloading the dataset, run this command to train the NeRF model:
 
 ```
-python train.py --dataset_name blender --root_dir $BLENDER_DIR --N_importance 64 --img_wh 400 400 --noise_std 0 --num_epochs 20 --batch_size 1024 --optimizer adam --lr 5e-4 --lr_scheduler cosine --exp_name exp
+python train.py --dataset_name blender --root_dir datasets/nerf_synthetic/lego --img_wh 400 400 --num_epochs_density 1 --num_epochs_style 1 --batch_size 1024 --lr 1e-3
 ```
 
 You can monitor the training process by `tensorboard --logdir runs` and go to `localhost:6006` in your browser.
@@ -23,7 +23,7 @@ You can monitor the training process by `tensorboard --logdir runs` and go to `l
 Use [eval.py](eval.py) to create the whole sequence of moving views.
 E.g.
 ```
-python eval.py --root_dir $BLENDER --dataset_name blender --scene_name lego --img_wh 400 400 --N_importance 64 --ckpt_path $CKPT_PATH
+python eval.py --dataset_name blender --root_dir datasets/nerf_synthetic/lego --scene_name lego --img_wh 400 400 --ckpt_path $CKPT_PATH
 ```
 
 It will create folder `results/{dataset_name}/{scene_name}` and run inference on all test data, finally create a gif out of them.
