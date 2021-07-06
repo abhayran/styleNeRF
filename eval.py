@@ -35,6 +35,7 @@ def get_opts():
 
     parser.add_argument('--coarse_path', type=str, help='path to the coarse NeRF model')
     parser.add_argument('--fine_path', type=str, help='path to the fine NeRF model')
+    parser.add_argument('--gif_name', type=str, help='name for the gif to be saved')
 
     # original NeRF parameters
     parser.add_argument('--N_emb_xyz', type=int, default=10,
@@ -147,7 +148,7 @@ if __name__ == "__main__":
             img_gt = rgbs.view(h, w, 3)
             psnrs += [metrics.psnr(img_gt, img_pred).item()]
 
-    imageio.mimsave('nerf.gif', imgs, fps=30)
+    imageio.mimsave(f'{args.gif_name}.gif', imgs, fps=30)
 
     if psnrs:
         mean_psnr = np.mean(psnrs)

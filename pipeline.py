@@ -12,11 +12,24 @@ import math
 import matplotlib.pyplot as plt
 import imageio
 import os
+import torchvision.transforms as transforms
 
 
 def show(img):
     plt.imshow(img.detach().cpu().numpy())
     plt.show()
+
+
+def image_loader(image_name, imsize):
+    image = Image.open(image_name)
+    loader = transforms.Compose([
+        transforms.Resize(imsize),  # scale imported image
+        transforms.ToTensor()]  # transform it into a torch tensor
+    )
+
+    # fake batch dimension required to fit network's input dimensions
+    image = loader(image).unsqueeze(0)
+    return image.to(torch.float)
 
 
 class Pipeline:
@@ -60,9 +73,10 @@ class Pipeline:
         self.create_checkpoint_data()
 
     def create_checkpoint_data(self):
-        dataset = self.dataset(split='train', is_learning_density=True, **self.kwargs)
+        dataset = self.dataset(split='train', is_learning_density=True,
+                        root_dir=self.kwargs['root_dir'], img_wh=(400, 400), perturbation=self.kwargs['perturbation'])
         img_idx = 4
-        img_wh = tuple(self.hparams.img_wh)[0]
+        img_wh = 400
         self.checkpoint_rays = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
         self.checkpoint_ts = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
 
@@ -143,38 +157,68 @@ class Pipeline:
                 with torch.no_grad():
                     self.logger('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs))
 
+    def _prepare_for_feature_loss(self, img: torch.tensor, **kwargs):
+        '''img of shape (H*W, 3) -> (1, 3, w, h)'''
+        img_wh = kwargs.get('img_wh', None)
+        if img_wh is None:
+            img_wh = self.hparams.img_wh[0]
+        img = img.permute(1, 0)  # (3, H*W)
+        img = img.view(3, img_wh, img_wh)  # (3,W,H)
+        img = img.unsqueeze(0)  # (1,3,W,H)
+        return img
+
+    def reset_style_mlp(self):
+        for child in self.models['fine'].children():
+            if not hasattr(child, 'density'):
+                # layer.reset_parameters()
+                for param in child.parameters():
+                    if len(param.data.shape) == 2:
+                        torch.nn.init.xavier_uniform_(param.data)
+                    else:
+                        param.data = torch.zeros_like(param.data)
+
     def learn_style(self, style_path, style_mode='memory_saving', **kwargs):
-        self.style_image = Image.open(style_path)
-        self.style_image = torch.tensor(np.array(self.style_image), device=self.device, dtype=torch.float)
-        self.style_image = self.style_image.permute(2, 0, 1)
-        self.style_image = torch.unsqueeze(self.style_image, 0) / 255.0
+        # self.style_image = Image.open(style_path)
+        # self.style_image = torch.tensor(np.array(self.style_image), device=self.device, dtype=torch.float)
+        # self.style_image = self.style_image.permute(2, 0, 1)
+        # self.style_image = torch.unsqueeze(self.style_image, 0) / 255.0
+
+        self.reset_style_mlp()
+
+        self.style_image = image_loader(
+            image_name=style_path,
+            imsize=self.hparams.img_wh[0]
+        )
+        self.style_image = self.style_image.to(self.device)
 
         img_wh = self.kwargs['img_wh'][0]
 
-        num_epochs = self.hparams.num_epochs_density
+        num_epochs = self.hparams.num_epochs_style
         device = self.device
         optimizer = get_optimizer(self.hparams, self.models)
-        loss_func = loss_dict['style'](self.style_image)
+        loss_func = loss_dict['style'](self.style_image, style_weight=1000000, content_weight=1)
 
         num_patches = (img_wh // 50) ** 2
 
         if style_mode == 'patch':  # transfer style using patches
+            # image logging
+            self.log_checkpoint_image('start')
+
             self.train_dataset.set_params(is_learning_density=False, render_patches=True)
-            data_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=True)
+            data_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=False)
 
             for epoch in range(num_epochs):
                 for idx, data in enumerate(data_loader):
-
-                    # image logging
-                    if idx % 64 == 0:
-                        self.log_checkpoint_image(str(idx))
 
                     rays, rgbs, ts = data['rays'].to(device), data['rgbs'].to(device), data['ts'].to(device)
                     rays = rays.squeeze()
                     rgbs = rgbs.squeeze()
                     ts = ts.squeeze()
+
+                    rgbs = self._prepare_for_feature_loss(rgbs, img_wh=50)
                     optimizer.zero_grad()
                     rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                    rendered_image = self._prepare_for_feature_loss(rendered_image, img_wh=50)
                     if torch.mean(rendered_image) > 0.99:  # empty image
                         continue
                     loss = loss_func(rendered_image, rgbs)
@@ -182,12 +226,17 @@ class Pipeline:
                     loss.backward()
                     optimizer.step()
 
+            # image logging
+            self.log_checkpoint_image('end')
+
         elif style_mode == 'memory_saving':  # render whole images to transfer the style
+            # image logging
+            self.log_checkpoint_image('start')
+
             for epoch in range(num_epochs):
                 for i in range(100):
 
-                    # image logging
-                    self.log_checkpoint_image(str(i))
+                    # self.log_checkpoint_image(str(i))
 
                     # Substage 1: store gradients
                     self.train_dataset.set_params(is_learning_density=False, render_patches=False)
@@ -197,12 +246,20 @@ class Pipeline:
                         rays = rays.squeeze()
                         rgbs = rgbs.squeeze()
                         ts = ts.squeeze()
+
+                        rgbs = self._prepare_for_feature_loss(rgbs)
+
                         rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                        rendered_image = self._prepare_for_feature_loss(rendered_image)
+
                     rendered_image.requires_grad_()
                     loss = loss_func(rendered_image, rgbs)
                     self.logger('Loss/train', loss)
                     loss.backward()
-                    gradient = rendered_image.grad.reshape(img_wh, img_wh, 3).clone().detach()
+
+                    gradient = rendered_image.grad.clone().detach()
+                    # gradient = rendered_image.grad.reshape(img_wh, img_wh, 3).clone().detach()
+
 
                     # Substage 2: backprop gradients through NeRF
                     self.train_dataset.set_params(is_learning_density=False, render_patches=True)
@@ -213,33 +270,44 @@ class Pipeline:
                         rays = rays.squeeze()
                         ts = ts.squeeze()
 
-                        rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine'].reshape(50, 50, 3)
+                        rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                        rendered_image = self._prepare_for_feature_loss(rendered_image, img_wh=50)
+
                         if torch.mean(rendered_image) > 0.99:  # empty image
                             continue
                         r, c = j // (img_wh // 50), j % (img_wh // 50)
-                        rendered_image.backward(gradient[r * 50: (r + 1) * 50, c * 50: (c + 1) * 50])
+                        rendered_image.backward(gradient[:, :, r * 50: (r + 1) * 50, c * 50: (c + 1) * 50])
                     optimizer.step()
+
+            # image logging
+            self.log_checkpoint_image('end')
 
         elif style_mode == 'small':
             self.train_dataset.set_params(is_learning_density=False, render_patches=False)
             data_loader = DataLoader(self.train_dataset, shuffle=True, batch_size=1)
+
+            # image logging
+            self.log_checkpoint_image('start')
+
             for epoch in range(num_epochs):
                 for idx, data in enumerate(data_loader):
-
-                    # image logging
-                    self.log_checkpoint_image(str(idx))
-
                     rays, rgbs, ts = data['rays'].to(device), data['rgbs'].to(device), data['ts'].to(device)
                     rays = rays.squeeze()
                     rgbs = rgbs.squeeze()
                     ts = ts.squeeze()
 
+                    rgbs = self._prepare_for_feature_loss(rgbs)
+
                     optimizer.zero_grad()
                     rendered_image = self(rays, ts, self.train_dataset.white_back)['rgb_fine']
+                    rendered_image = self._prepare_for_feature_loss(rendered_image)
                     loss = loss_func(rendered_image, rgbs)
                     self.logger('Loss/train', loss)
                     loss.backward()
                     optimizer.step()
+
+            # image logging
+            self.log_checkpoint_image('end')
 
         else:
             raise ValueError('Please enter a valid mode for style transfer.')
