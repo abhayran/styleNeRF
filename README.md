@@ -4,15 +4,13 @@ Memory efficient style transfer for neural radiance fields in PyTorch.
 
 This project is built upon a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
 
-## Project requirements
-
 ## Download the blender dataset
 
 Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) and extract the content under `./datasets`.
 
 ## Quick demonstration
 
-If you want to give this repo a quick try, you can run `demo.ipynb` which will first train a NeRF model on the synthetic lego truck scene, then transfer the style from Van Gogh's starry night image, and finally render a gif. Whole process takes around 2.5 hours on a single RTX 2070 GPU with 8GB of memory.
+If you want to give this repo a quick try, you can run `demo.ipynb` which will first train a NeRF model on the synthetic lego truck scene, then transfer the style from Van Gogh's starry night image, and finally render a gif. Whole process takes around 3 hours on a single RTX 2070 GPU with 8GB of memory.
 
 You can monitor the training process via the command `tensorboard --logdir runs` and going to `localhost:6006` in your browser.
 
@@ -66,8 +64,4 @@ It will create folder `results/{dataset_name}/{scene_name}` and run inference on
 - Example: A NeRF model trained first on the synthetic lego truck data with 400 x 400 images, then learned the style of the Van Gogh's starry night image using the `memory_saving` mode, using a GPU with 8GB of memory. Memory saving mode enables working with GPUs having quite low memory.   
 
 ![ezgif com-gif-maker](https://user-images.githubusercontent.com/40629249/124356665-6ca45680-dc17-11eb-8830-45399841ecdd.gif)
-
-- Comparison of different style transfer approaches:
-
-![image](https://user-images.githubusercontent.com/40629249/124361442-949fb400-dc2f-11eb-87d3-8a92860cc789.png)
 

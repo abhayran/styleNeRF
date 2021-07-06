@@ -10,7 +10,6 @@ from metrics import *
 from utils.logger import Logger
 import math
 import matplotlib.pyplot as plt
-import imageio
 import os
 import torchvision.transforms as transforms
 
@@ -80,7 +79,7 @@ class Pipeline:
         self.checkpoint_rays = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), :8]
         self.checkpoint_ts = dataset.all_rays[img_idx * (img_wh ** 2):(img_idx + 1) * (img_wh ** 2), 8]
 
-    def set_requires_grad(self, requires_grad=True):
+    def set_requires_grad(self, requires_grad=True):  # set requires grad for the density layers
         for child in self.models['coarse'].children():
             if hasattr(child, 'density'):
                 for param in child.parameters():
@@ -90,7 +89,7 @@ class Pipeline:
                 for param in child.parameters():
                     param.requires_grad = requires_grad
 
-    def __call__(self, rays, ts, white_back):
+    def __call__(self, rays, ts, white_back):  # forward pass through NeRF
         results = defaultdict(list)
         for i in range(0, rays.shape[0], self.hparams.chunk):
             rendered_ray_chunks = render_rays(self.models,
@@ -121,7 +120,7 @@ class Pipeline:
             log_image = log_image.squeeze().permute(1, 0).view(3, dim, dim)
             self.logger(f'checkpoint_image_{string}', log_image)
 
-    def learn_density(self, **kwargs):
+    def learn_density(self, **kwargs):  # train geometry MLP
         loss_func = loss_dict['nerfw'](coef=1)
         num_epochs = self.hparams.num_epochs_density
         device = self.device
@@ -157,7 +156,7 @@ class Pipeline:
                 with torch.no_grad():
                     self.logger('PSNR/train', psnr(results[f'rgb_{typ}'], rgbs))
 
-    def _prepare_for_feature_loss(self, img: torch.tensor, **kwargs):
+    def _prepare_for_feature_loss(self, img: torch.tensor, **kwargs):  # preprocessing
         '''img of shape (H*W, 3) -> (1, 3, w, h)'''
         img_wh = kwargs.get('img_wh', None)
         if img_wh is None:
@@ -167,7 +166,7 @@ class Pipeline:
         img = img.unsqueeze(0)  # (1,3,W,H)
         return img
 
-    def reset_style_mlp(self):
+    def reset_style_mlp(self):  # reset the parameters of style mlp
         for child in self.models['fine'].children():
             if not hasattr(child, 'density'):
                 # layer.reset_parameters()
@@ -178,11 +177,6 @@ class Pipeline:
                         param.data = torch.zeros_like(param.data)
 
     def learn_style(self, style_path, style_mode='memory_saving', **kwargs):
-        # self.style_image = Image.open(style_path)
-        # self.style_image = torch.tensor(np.array(self.style_image), device=self.device, dtype=torch.float)
-        # self.style_image = self.style_image.permute(2, 0, 1)
-        # self.style_image = torch.unsqueeze(self.style_image, 0) / 255.0
-
         self.reset_style_mlp()
 
         self.style_image = image_loader(
@@ -235,9 +229,6 @@ class Pipeline:
 
             for epoch in range(num_epochs):
                 for i in range(100):
-
-                    # self.log_checkpoint_image(str(i))
-
                     # Substage 1: store gradients
                     self.train_dataset.set_params(is_learning_density=False, render_patches=False)
                     with torch.no_grad():
@@ -258,8 +249,6 @@ class Pipeline:
                     loss.backward()
 
                     gradient = rendered_image.grad.clone().detach()
-                    # gradient = rendered_image.grad.reshape(img_wh, img_wh, 3).clone().detach()
-
 
                     # Substage 2: backprop gradients through NeRF
                     self.train_dataset.set_params(is_learning_density=False, render_patches=True)
