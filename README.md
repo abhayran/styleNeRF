@@ -1,8 +1,8 @@
 # styleNeRF
 
-Memory efficient style transfer for neural radiance fields in PyTorch. 
+Memory efficient style transfer for neural radiance fields [1] in PyTorch. 
 
-This project is built upon a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) [1] and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
+This project is built upon a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) [2] and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
 
 ## Download the blender dataset
 
@@ -67,4 +67,7 @@ It will create folder `results/{dataset_name}/{scene_name}` and run inference on
 
 ## References
 <a id="1">[1]</a> 
-Chen Quei-An.  Nerf_pl: A pytorch-lightning implementation of neural radiance fields, 2020.
+Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng. *Nerf: Representing scenes as neural radiance fields for view synthesis.* In European Conference on Computer Vision, pages 405–421. Springer, 2020.
+
+<a id="2">[2]</a> 
+Chen Quei-An.  *Nerf_pl: A pytorch-lightning implementation of neural radiance fields*, 2020.
