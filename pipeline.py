@@ -121,7 +121,7 @@ class Pipeline:
             self.logger(f'checkpoint_image_{string}', log_image)
 
     def learn_density(self, **kwargs):  # train geometry MLP
-        loss_func = loss_dict['nerfw'](coef=1)
+        loss_func = loss_dict['nerfw']()
         num_epochs = self.hparams.num_epochs_density
         device = self.device
 
@@ -144,10 +144,7 @@ class Pipeline:
 
                 optimizer.zero_grad()
                 results = self(rays, ts, self.train_dataset.white_back)
-                loss_d = loss_func(results, rgbs)
-                for k, v in loss_d.items():
-                    self.logger(f'Loss/train_{k}', v)
-                loss = sum(l for l in loss_d.values())
+                loss = loss_func(results, rgbs)
                 self.logger('Loss/train', loss)
                 loss.backward()
                 optimizer.step()
@@ -202,6 +199,7 @@ class Pipeline:
             data_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=False)
 
             for epoch in range(num_epochs):
+                print(f'Mode: Patch, Starting epoch {epoch + 1} to learn style...')
                 for idx, data in enumerate(data_loader):
 
                     rays, rgbs, ts = data['rays'].to(device), data['rgbs'].to(device), data['ts'].to(device)
@@ -228,6 +226,7 @@ class Pipeline:
             self.log_checkpoint_image('start')
 
             for epoch in range(num_epochs):
+                print(f'Mode: Memory saving (No patch), Starting epoch {epoch + 1} to learn style...')
                 for i in range(100):
                     # Substage 1: store gradients
                     self.train_dataset.set_params(is_learning_density=False, render_patches=False)
@@ -279,6 +278,7 @@ class Pipeline:
             self.log_checkpoint_image('start')
 
             for epoch in range(num_epochs):
+                print(f'Mode: Small, Starting epoch {epoch + 1} to learn style...')
                 for idx, data in enumerate(data_loader):
                     rays, rgbs, ts = data['rays'].to(device), data['rgbs'].to(device), data['ts'].to(device)
                     rays = rays.squeeze()
