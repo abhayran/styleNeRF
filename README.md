@@ -10,9 +10,7 @@ Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders
 
 ## Quick demonstration
 
-If you want to give this repo a quick try, you can run `demo.ipynb` which will first train a NeRF model on the synthetic lego truck scene, then transfer the style from Van Gogh's starry night image, and finally render a gif. Whole process takes around 3 hours on a single RTX 2070 GPU with 8GB of memory.
-
-You can monitor the training process via the command `tensorboard --logdir runs` and going to `localhost:6006` in your browser.
+If you want to give this repo a quick try, you can run `demo.ipynb` which will first train a NeRF model on the synthetic lego truck scene, then transfer the style from Van Gogh's starry night image, and finally render a gif. You can monitor the training process via the command `tensorboard --logdir runs` and going to `localhost:6006` in your browser.
 
 ## Model architecture
 
