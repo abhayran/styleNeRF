@@ -6,7 +6,7 @@ This project is built upon a [PyTorch Lightning implementation](https://github.c
 
 ## Download the blender dataset
 
-Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) and extract the content under `./datasets`.
+Download `nerf_synthetic.zip` from [here](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) and extract the content under `./datasets`. We work with the lego dataset which is expected to be under `./datasets/nerf_synthetic/lego`.
 
 ## Quick demonstration
 
