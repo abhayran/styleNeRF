@@ -1,6 +1,6 @@
 # styleNeRF
 
-Memory efficient style transfer for neural radiance fields [1] in PyTorch. 
+Memory efficient 3D style transfer for neural radiance fields [1] in PyTorch. 
 
 This project is built upon a [PyTorch Lightning implementation](https://github.com/kwea123/nerf_pl) [2] and [the official PyTorch tutorial for neural style transfer](https://pytorch.org/tutorials/advanced/neural_style_tutorial.html). 
 
